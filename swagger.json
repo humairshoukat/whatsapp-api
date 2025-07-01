@@ -1,0 +1,271 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "WhatsApp REST API",
+    "version": "2.0.0",
+    "description": "A full-featured WhatsApp REST API powered by whatsapp-web.js with persistent SQLite storage."
+  },
+  "servers": [
+    { "url": "http://localhost:3000" }
+  ],
+  "paths": {
+    "/status": {
+      "get": {
+        "summary": "Get connection status",
+        "responses": {
+          "200": { "description": "Status" }
+        }
+      }
+    },
+    "/qr-code": {
+      "get": {
+        "summary": "Get QR code as a Data URL",
+        "responses": {
+          "200": {
+            "description": "QR code image (base64 Data URL)",
+            "content": { "application/json": { } }
+          }
+        }
+      }
+    },
+    "/qr-code-image": {
+      "get": {
+        "summary": "Get QR code as a PNG image",
+        "responses": {
+          "200": {
+            "description": "QR code PNG image",
+            "content": {
+              "image/png": { "schema": { "type": "string", "format": "binary" } }
+            }
+          }
+        }
+      }
+    },
+    "/list-contacts": {
+      "get": {
+        "summary": "List all contacts",
+        "responses": {
+          "200": {
+            "description": "Contacts found",
+            "content": { "application/json": { } }
+          }
+        }
+      }
+    },
+    "/search-contacts": {
+      "get": {
+        "summary": "Search contacts by name or phone number",
+        "parameters": [
+          { "in": "query", "name": "q", "schema": { "type": "string" }, "required": true, "description": "Query for name or number" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contacts found",
+            "content": { "application/json": { } }
+          }
+        }
+      }
+    },
+    "/list-messages": {
+      "get": {
+        "summary": "List messages for a chat",
+        "parameters": [
+          { "in": "query", "name": "chat_id", "schema": { "type": "string" }, "required": true, "description": "Chat ID" },
+          { "in": "query", "name": "limit", "schema": { "type": "integer" }, "required": false, "description": "Number of messages" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Messages list",
+            "content": { "application/json": { } }
+          }
+        }
+      }
+    },
+    "/list-chats": {
+      "get": {
+        "summary": "List all chats with metadata",
+        "responses": {
+          "200": { "description": "List of chats", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/get-chat": {
+      "get": {
+        "summary": "Get information about a specific chat",
+        "parameters": [
+          { "in": "query", "name": "chat_id", "schema": { "type": "string" }, "required": true }
+        ],
+        "responses": {
+          "200": { "description": "Chat info", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/get-direct-chat-by-contact": {
+      "get": {
+        "summary": "Find a direct chat with a specific contact",
+        "parameters": [
+          { "in": "query", "name": "contact_id", "schema": { "type": "string" }, "required": true }
+        ],
+        "responses": {
+          "200": { "description": "Direct chat info", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/get-contact-chats": {
+      "get": {
+        "summary": "List all chats involving a specific contact",
+        "parameters": [
+          { "in": "query", "name": "contact_id", "schema": { "type": "string" }, "required": true }
+        ],
+        "responses": {
+          "200": { "description": "Chats", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/get-last-interaction": {
+      "get": {
+        "summary": "Get the most recent message with a contact",
+        "parameters": [
+          { "in": "query", "name": "contact_id", "schema": { "type": "string" }, "required": true }
+        ],
+        "responses": {
+          "200": { "description": "Last interaction", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/get-message-context": {
+      "get": {
+        "summary": "Retrieve context around a specific message",
+        "parameters": [
+          { "in": "query", "name": "message_id", "schema": { "type": "string" }, "required": true },
+          { "in": "query", "name": "radius", "schema": { "type": "integer" }, "required": false, "description": "Context radius (minutes)" }
+        ],
+        "responses": {
+          "200": { "description": "Message context", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/send-message": {
+      "post": {
+        "summary": "Send a WhatsApp message",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": { "type": "string", "description": "Recipient phone number or group JID" },
+                  "message": { "type": "string" }
+                },
+                "required": ["to", "message"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Message sent", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/send-file": {
+      "post": {
+        "summary": "Send a file (image, video, audio, document)",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": { "type": "string", "description": "Recipient phone number or group JID" },
+                  "file": { "type": "string", "format": "binary" },
+                  "caption": { "type": "string" }
+                },
+                "required": ["to", "file"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "File sent", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/send-audio-message": {
+      "post": {
+        "summary": "Send an audio file as a WhatsApp voice message",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to": { "type": "string", "description": "Recipient phone number or group JID" },
+                  "file": { "type": "string", "format": "binary" }
+                },
+                "required": ["to", "file"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Voice message sent", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/download-media": {
+      "get": {
+        "summary": "Download media from a WhatsApp message",
+        "parameters": [
+          { "in": "query", "name": "message_id", "schema": { "type": "string" }, "required": true }
+        ],
+        "responses": {
+          "200": {
+            "description": "Media file",
+            "content": { "application/octet-stream": { "schema": { "type": "string", "format": "binary" } } }
+          }
+        }
+      }
+    },
+    "/messages": {
+      "get": {
+        "summary": "List recent messages",
+        "responses": {
+          "200": { "description": "Recent messages", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/chats": {
+      "get": {
+        "summary": "List all chats",
+        "responses": {
+          "200": { "description": "Chats", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "responses": {
+          "200": { "description": "Health info", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/reconnect": {
+      "post": {
+        "summary": "Force reconnect",
+        "responses": {
+          "200": { "description": "Reconnect result", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/shutdown": {
+      "post": {
+        "summary": "Shutdown the server cleanly",
+        "responses": {
+          "200": { "description": "Server shutting down", "content": { "application/json": { } } }
+        }
+      }
+    }
+  }
+}
