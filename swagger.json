@@ -2,12 +2,9 @@
   "openapi": "3.0.0",
   "info": {
     "title": "WhatsApp REST API",
-    "version": "2.0.0",
+    "version": "1.0.0",
     "description": "A full-featured WhatsApp REST API powered by whatsapp-web.js with persistent SQLite storage."
   },
-  "servers": [
-    { "url": "http://localhost:3000" }
-  ],
   "paths": {
     "/status": {
       "get": {
@@ -81,6 +78,22 @@
         }
       }
     },
+    "/recent-messages": {
+      "get": {
+        "summary": "List recent messages",
+        "responses": {
+          "200": { "description": "Recent messages", "content": { "application/json": { } } }
+        }
+      }
+    },
+    "/unread-chats": {
+      "get": {
+        "summary": "List unread chats",
+        "responses": {
+          "200": { "description": "Unread chats", "content": { "application/json": { } } }
+        }
+      }
+    },
     "/list-chats": {
       "get": {
         "summary": "List all chats with metadata",
@@ -97,17 +110,6 @@
         ],
         "responses": {
           "200": { "description": "Chat info", "content": { "application/json": { } } }
-        }
-      }
-    },
-    "/get-direct-chat-by-contact": {
-      "get": {
-        "summary": "Find a direct chat with a specific contact",
-        "parameters": [
-          { "in": "query", "name": "contact_id", "schema": { "type": "string" }, "required": true }
-        ],
-        "responses": {
-          "200": { "description": "Direct chat info", "content": { "application/json": { } } }
         }
       }
     },
@@ -155,7 +157,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "to": { "type": "string", "description": "Recipient phone number or group JID" },
+                  "chat_id/phone_no": { "type": "string", "description": "Recipient phone number or chat_id" },
                   "message": { "type": "string" }
                 },
                 "required": ["to", "message"]
@@ -177,7 +179,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "to": { "type": "string", "description": "Recipient phone number or group JID" },
+                  "chat_id/phone_no": { "type": "string", "description": "Recipient phone number or chat_id" },
                   "file": { "type": "string", "format": "binary" },
                   "caption": { "type": "string" }
                 },
@@ -227,43 +229,19 @@
         }
       }
     },
-    "/messages": {
-      "get": {
-        "summary": "List recent messages",
-        "responses": {
-          "200": { "description": "Recent messages", "content": { "application/json": { } } }
-        }
-      }
-    },
-    "/chats": {
-      "get": {
-        "summary": "List all chats",
-        "responses": {
-          "200": { "description": "Chats", "content": { "application/json": { } } }
-        }
-      }
-    },
-    "/health": {
-      "get": {
-        "summary": "Health check",
-        "responses": {
-          "200": { "description": "Health info", "content": { "application/json": { } } }
-        }
-      }
-    },
     "/reconnect": {
       "post": {
-        "summary": "Force reconnect",
+        "summary": "Reconnect to Whatsapp",
         "responses": {
-          "200": { "description": "Reconnect result", "content": { "application/json": { } } }
+          "200": { "description": "Reconnect to Whatsapp & initialize the client", "content": { "application/json": { } } }
         }
       }
     },
-    "/shutdown": {
+    "/disconnect": {
       "post": {
-        "summary": "Shutdown the server cleanly",
+        "summary": "Disconnect to WhatsApp",
         "responses": {
-          "200": { "description": "Server shutting down", "content": { "application/json": { } } }
+          "200": { "description": "Disconnect WhatsApp client session", "content": { "application/json": { } } }
         }
       }
     }
