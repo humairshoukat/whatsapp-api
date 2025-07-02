@@ -286,7 +286,7 @@ app.get('/list-messages', async (req, res) => {
             } else {
                 if (msg.hasMedia) {
                     const media = await msg.downloadMedia();
-                    if (media) {
+                    if (media && media.data) {
                         const ext = media.mimetype.split('/')[1];
                         let fname;
                         if (msg.type === 'audio' || msg.type === 'ptt') {
@@ -321,38 +321,35 @@ app.get('/list-messages', async (req, res) => {
     }
 });
 
+
+// Get media URL
+app.get('/stream-url/:msgid', async (req, res) => {
+    const msgId = req.params.msgid;
+
+    // Check msg in the DB
+    let dbMsg = await new Promise((resolve) =>
+        getMessageByIdFromDb(msgId, (err, row) => resolve(row))
+    );
+
+    if (!dbMsg || !dbMsg.media_path) {
+        return res.status(404).json({ error: 'Media file not found' });
+    }
+
+    const filePath = dbMsg.media_path;
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Media file not found' });
+    }
+
+    res.json({
+        "status": "OK",
+        "hasMedia": true,
+        "mediaPath": filePath
+    });
+
+});
+
+
 // Media Streaming / Download endpoint
-// app.get('/media/:msgid', async (req, res) => {
-//     const msgId = req.params.msgid;
-
-//     // Check msg in the DB
-//     let dbMsg = await new Promise((resolve) =>
-//         getMessageByIdFromDb(msg.id.id, (err, row) => resolve(row))
-//     );
-//     if (!dbMsg) return res.status(404).json({ error: 'Media file not found' });
-
-
-//     // Lookup filename in DB
-//     const filename = dbMsg.strip("media/");
-//     const filePath = dbMsg.mediaPath;
-
-//     if (!fs.existsSync(filePath)) {
-//         return res.status(404).json({ error: 'Media file not found' });
-//     }
-
-//     if (['audio', 'ptt'].includes(dbMsg.type)) {
-//         res.setHeader('Content-Type', 'audio/ogg');
-//         const stream = fs.createReadStream(filePath);
-//         stream.pipe(res);
-//     } else if (['image', 'video'].includes(dbMsg.type)) {
-//         res.setHeader('Content-Type', dbMsg.type);
-//     } else {
-//         res.setHeader('Content-Type', dbMsg.type);
-//         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-//     }
-// });
-
-
 app.get('/media/:msgid', async (req, res) => {
     const msgId = req.params.msgid;
 
@@ -370,52 +367,55 @@ app.get('/media/:msgid', async (req, res) => {
         return res.status(404).json({ error: 'Media file not found' });
     }
 
-    // Set correct headers & stream file
+    // AUDIO (stream .ogg)
     if (['audio', 'ptt'].includes(dbMsg.type)) {
-        // WhatsApp voice notes are ogg/opus
         res.setHeader('Content-Type', 'audio/ogg');
         fs.createReadStream(filePath).pipe(res);
+    
+    // IMAGE (jpeg/png/webp)
     } else if (dbMsg.type === 'image') {
         const ext = path.extname(filePath).slice(1);
         res.setHeader('Content-Type', mime.lookup(ext) || 'image/jpeg');
         fs.createReadStream(filePath).pipe(res);
+    
+    // VIDEO (stream .mp4)
     } else if (dbMsg.type === 'video') {
-        const ext = path.extname(filePath).slice(1);
-        res.setHeader('Content-Type', mime.lookup(ext) || 'video/mp4');
-        fs.createReadStream(filePath).pipe(res);
-    } else if (dbMsg.type === 'document') {
-        const ext = path.extname(filePath).slice(1);
-        res.setHeader('Content-Type', mime.lookup(ext) || 'application/octet-stream');
-        res.setHeader(
-            'Content-Disposition',
-            `attachment; filename="${path.basename(filePath)}"`
-        );
-        fs.createReadStream(filePath).pipe(res);
+        var stat = fs.statSync(filePath);
+        var total = stat.size;
+        if (req.headers['range']) {
+            var range = req.headers.range;
+            var parts = range.replace(/bytes=/, "").split("-");
+            var partialstart = parts[0];
+            var partialend = parts[1];
+
+            var start = parseInt(partialstart, 10);
+            var end = partialend ? parseInt(partialend, 10) : total-1;
+            var chunksize = (end-start)+1;
+
+            var file = fs.createReadStream(filePath, {start: start, end: end});
+            res.writeHead(206, { 
+                'Content-Range': 'bytes ' + start + '-' + end + '/' + total, 
+                'Accept-Ranges': 'bytes', 
+                'Content-Length': chunksize, 
+                'Content-Type': 'video/mp4' 
+            });
+            file.pipe(res);
+        } else {
+            res.writeHead(200, { 
+                'Content-Length': total, 
+                'Content-Type': 'video/mp4' 
+            });
+            fs.createReadStream(filePath).pipe(res);
+        }
+
+    // Document or Unknown: stream as attachment / download
     } else {
-        // Unknown type: stream as attachment
+        const ext = path.extname(filePath).slice(1);
         res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader(
-            'Content-Disposition',
-            `attachment; filename="${path.basename(filePath)}"`
-        );
+        res.setHeader('Content-Disposition', `attachment; filename="${path.basename(filePath)}"`);
         fs.createReadStream(filePath).pipe(res);
     }
 });
-
-// app.get('/media/:msgid', (req, res) => {
-//     const msgId = req.params.msgid;
-//     // Lookup filename in DB, or use naming convention
-//     const filename = `${msgId}.ogg`;
-//     const filePath = path.join(__dirname, 'media', filename);
-
-//     if (!fs.existsSync(filePath)) {
-//         return res.status(404).json({ error: 'Media file not found' });
-//     }
-
-//     res.setHeader('Content-Type', 'audio/ogg');
-//     const stream = fs.createReadStream(filePath);
-//     stream.pipe(res);
-// });
 
 
 // List chats
@@ -434,6 +434,7 @@ app.get('/list-chats', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
 
 // Get chat info
 app.get('/get-chat', async (req, res) => {
