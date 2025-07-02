@@ -338,29 +338,6 @@ app.get('/recent-messages', (req, res) => {
     );
 });
 
-// List unread chats
-app.get('/unread-chats', async (req, res) => {
-    try {
-        let chats = await client.getChats();
-
-        // Filter chats with unread messages, then map
-        const result = chats
-            .filter(chat => chat.unreadCount > 0)
-            .map(chat => ({
-                id: chat.id._serialized,
-                name: chat.name || chat.formattedTitle || "",
-                last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
-                last_message: chat.lastMessage?.body || null,
-                unread_count: chat.unreadCount,
-                is_group: chat.isGroup
-            }));
-
-        res.json(result);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // Get media URL
 app.get('/stream-url/:msgid', async (req, res) => {
     const msgId = req.params.msgid;
@@ -467,6 +444,29 @@ app.get('/list-chats', async (req, res) => {
             unread_count: chat.unreadCount || 0,
             is_group: chat.isGroup
         })));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// List unread chats
+app.get('/unread-chats', async (req, res) => {
+    try {
+        let chats = await client.getChats();
+
+        // Filter chats with unread messages, then map
+        const result = chats
+            .filter(chat => chat.unreadCount > 0)
+            .map(chat => ({
+                id: chat.id._serialized,
+                name: chat.name || chat.formattedTitle || "",
+                last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
+                last_message: chat.lastMessage?.body || null,
+                unread_count: chat.unreadCount,
+                is_group: chat.isGroup
+            }));
+
+        res.json(result);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
