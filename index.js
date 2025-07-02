@@ -57,7 +57,8 @@ const client = new Client({
 });
 
 
-// Custom DB Functions
+// ----------------- Custom functions ----------------->>>
+
 
 // Save QR code to DB
 function saveQrToDb(qr) {
@@ -95,8 +96,22 @@ function getMessageByIdFromDb(msgId, cb) {
     db.get(`SELECT * FROM whatsapp_messages WHERE id = ?`, [msgId], (err, row) => cb(err, row));
 }
 
+// Function to remove bot contacts
+function looksLikeBotOrMeta(name, number) {
+    // Filter out Meta AI and bots by known names, numbers, or patterns
+    const botKeywords = ['AI', 'Meta', 'Dungeon', 'robot', 'bee', 'detective', 'master', 'editor', 'starter', 'sidekick', 'tutor', 'coach', 'pro', 'chore', 'alien', 'd.i. whyer', 'chat noir', 'block', 'spark', 'whimsy', 'mentor', 'guru', 'bot', 'bee', 'game', 'stitchy', 'austen', 'doomy', 'noir', 'clef', 'alvin', 'coach', 'compassionate', 'career', 'footballer', 'homefinder', 'data', 'info', 'pro', 'tutor', 'genie', 'divine', 'guitar', 'riot', 'happiness', 'story', 'maestro', 'anchor', 'savant', 'vibe', 'mentor', 'bff', 'the', 'older', 'grandpa', 'pro', 'spark', 'blister', 'madame', 'pumpkin', 'rainbow', 'trivia', 'driven', 'game', 'sun', 'fleur', 'beeley', 'beekeeper', 'chair', 'block', 'ai', 'noir'];
+    if (!name && !number) return true;
+    name = (name || '').toLowerCase();
+    for (const kw of botKeywords) {
+        if (name.includes(kw.toLowerCase())) return true;
+    }
+    // Meta AI range is 13135550000-13135559999
+    if (number && /^1313555\d{4,}$/.test(number)) return true;
+    return false;
+}
 
-// WhatsApp event listeners
+
+// ------------------ WhatsApp event listeners ---------------------->>>
 
 client.on('qr', async (qr) => {
     currentQr = qr;
@@ -144,8 +159,9 @@ client.on('message', async (msg) => {
 client.initialize();
 
 
-// =============== API ROUTES ===============
+// ----------------- API Routes ----------------->>>
 
+// Root URL
 app.get('/', (req, res) => {
     res.json({
         "status": "OK"
@@ -153,6 +169,7 @@ app.get('/', (req, res) => {
     // res.redirect('/docs');
 });
 
+// Get status (whatsapp-api)
 app.get('/status', (req, res) => {
     res.json({
         connected,
@@ -161,6 +178,7 @@ app.get('/status', (req, res) => {
     });
 });
 
+// Get qr-code (text response)
 app.get('/qr-code', async (req, res) => {
     if (!currentQr) {
         getLatestQrFromDb(async (qr) => {
@@ -174,6 +192,7 @@ app.get('/qr-code', async (req, res) => {
     }
 });
 
+// Get qr-code (image response)
 app.get('/qr-code-image', async (req, res) => {
     if (!currentQr) {
         getLatestQrFromDb(async (qr) => {
@@ -188,20 +207,6 @@ app.get('/qr-code-image', async (req, res) => {
         res.send(img);
     }
 });
-
-// Function to remove bot contacts
-function looksLikeBotOrMeta(name, number) {
-    // Filter out Meta AI and bots by known names, numbers, or patterns
-    const botKeywords = ['AI', 'Meta', 'Dungeon', 'robot', 'bee', 'detective', 'master', 'editor', 'starter', 'sidekick', 'tutor', 'coach', 'pro', 'chore', 'alien', 'd.i. whyer', 'chat noir', 'block', 'spark', 'whimsy', 'mentor', 'guru', 'bot', 'bee', 'game', 'stitchy', 'austen', 'doomy', 'noir', 'clef', 'alvin', 'coach', 'compassionate', 'career', 'footballer', 'homefinder', 'data', 'info', 'pro', 'tutor', 'genie', 'divine', 'guitar', 'riot', 'happiness', 'story', 'maestro', 'anchor', 'savant', 'vibe', 'mentor', 'bff', 'the', 'older', 'grandpa', 'pro', 'spark', 'blister', 'madame', 'pumpkin', 'rainbow', 'trivia', 'driven', 'game', 'sun', 'fleur', 'beeley', 'beekeeper', 'chair', 'block', 'ai', 'noir'];
-    if (!name && !number) return true;
-    name = (name || '').toLowerCase();
-    for (const kw of botKeywords) {
-        if (name.includes(kw.toLowerCase())) return true;
-    }
-    // Meta AI range is 13135550000-13135559999
-    if (number && /^1313555\d{4,}$/.test(number)) return true;
-    return false;
-}
 
 // List all contacts (filter MyContact and only @c.us)
 app.get('/list-contacts', async (req, res) => {
@@ -321,6 +326,40 @@ app.get('/list-messages', async (req, res) => {
     }
 });
 
+// List recent messages
+app.get('/recent-messages', (req, res) => {
+    db.all(
+        `SELECT * FROM whatsapp_messages ORDER BY timestamp DESC LIMIT 50`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows);
+        }
+    );
+});
+
+// List unread chats
+app.get('/unread-chats', async (req, res) => {
+    try {
+        let chats = await client.getChats();
+
+        // Filter chats with unread messages, then map
+        const result = chats
+            .filter(chat => chat.unreadCount > 0)
+            .map(chat => ({
+                id: chat.id._serialized,
+                name: chat.name || chat.formattedTitle || "",
+                last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
+                last_message: chat.lastMessage?.body || null,
+                unread_count: chat.unreadCount,
+                is_group: chat.isGroup
+            }));
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Get media URL
 app.get('/stream-url/:msgid', async (req, res) => {
@@ -347,7 +386,6 @@ app.get('/stream-url/:msgid', async (req, res) => {
     });
 
 });
-
 
 // Media Streaming / Download endpoint
 app.get('/media/:msgid', async (req, res) => {
@@ -417,16 +455,15 @@ app.get('/media/:msgid', async (req, res) => {
     }
 });
 
-
-// List chats
+// Get all the current chats (including groups)
 app.get('/list-chats', async (req, res) => {
     try {
-        const chats = await client.getChats();
-        // res.json(chats);
+        let chats = await client.getChats();
         res.json(chats.map(chat => ({
             id: chat.id._serialized,
             name: chat.name || chat.formattedTitle || "",
             last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
+            last_message: chat.lastMessage?.body || null,
             unread_count: chat.unreadCount || 0,
             is_group: chat.isGroup
         })));
@@ -435,38 +472,19 @@ app.get('/list-chats', async (req, res) => {
     }
 });
 
-
-// Get chat info
+// Get individual chat by chat_id
 app.get('/get-chat', async (req, res) => {
     const chat_id = req.query.chat_id;
     if (!chat_id) return res.status(400).json({ error: "chat_id required" });
     try {
         const chat = await client.getChatById(chat_id);
-        res.json(chat);
-        // res.json({
-        //     id: chat.id._serialized,
-        //     name: chat.name || chat.formattedTitle || "",
-        //     last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
-        //     unread_count: chat.unreadCount || 0,
-        //     is_group: chat.isGroup
-        // });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Get direct chat by contact
-app.get('/get-direct-chat-by-contact', async (req, res) => {
-    const contact_id = req.query.contact_id;
-    if (!contact_id) return res.status(400).json({ error: "contact_id required" });
-    try {
-        const chats = await client.getChats();
-        const chat = chats.find(c => !c.isGroup && c.id._serialized === contact_id);
-        if (!chat) return res.status(404).json({ error: "Chat not found" });
         res.json({
             id: chat.id._serialized,
             name: chat.name || chat.formattedTitle || "",
-            unread_count: chat.unreadCount || 0
+            last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
+            last_message: chat.lastMessage?.body || null,
+            unread_count: chat.unreadCount || 0,
+            is_group: chat.isGroup
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -486,6 +504,9 @@ app.get('/get-contact-chats', async (req, res) => {
         res.json(result.map(chat => ({
             id: chat.id._serialized,
             name: chat.name || chat.formattedTitle || "",
+            last_message_time: chat.timestamp ? new Date(chat.timestamp * 1000).toISOString() : null,
+            last_message: chat.lastMessage?.body || null,
+            unread_count: chat.unreadCount || 0,
             is_group: chat.isGroup
         })));
     } catch (err) {
@@ -623,34 +644,7 @@ app.get('/download-media', (req, res) => {
     );
 });
 
-// List recent messages
-app.get('/messages', (req, res) => {
-    db.all(
-        `SELECT * FROM whatsapp_messages ORDER BY timestamp DESC LIMIT 50`,
-        [],
-        (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(rows);
-        }
-    );
-});
-
-// List chats (raw)
-app.get('/chats', async (req, res) => {
-    try {
-        const chats = await client.getChats();
-        res.json(chats);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ status: "healthy", connected });
-});
-
-// Force reconnect
+// Reconnect to WhatsApp
 app.post('/reconnect', (req, res) => {
     try {
         client.destroy();
@@ -660,14 +654,23 @@ app.post('/reconnect', (req, res) => {
     } catch (err) {
         res.status(500).json({ error: "Failed to reconnect", detail: err.message });
     }
+})
+
+// Disconnect WhatsApp client session
+app.post('/disconnect', async (req, res) => {
+    try {
+        await client.destroy();
+        connected = false;
+        res.json({ success: true, message: "WhatsApp client disconnected" });
+        console.log('WhatsApp client disconnected');
+    } catch (err) {
+        res.status(500).json({ error: "Failed to disconnect", detail: err.message });
+    }
 });
 
-// Clean shutdown endpoint
-app.post('/shutdown', (req, res) => {
-    res.json({ message: 'Server shutting down...' });
-    console.log('Shutdown signal received. Closing server...');
-    setTimeout(() => process.exit(0), 500);
-});
+
+// ----------------------------------------->>>
+
 
 // Swagger UI
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
