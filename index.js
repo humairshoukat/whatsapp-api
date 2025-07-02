@@ -53,7 +53,10 @@ let currentQr = null;
 let connected = false;
 const client = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { headless: true }
+    puppeteer: {
+        headless: true,
+        args: ['--no-sandbox']
+    }
 });
 
 
