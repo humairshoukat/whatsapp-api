@@ -4,6 +4,7 @@ const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode');
 const multer = require('multer');
 const fs = require('fs');
+const rimraf = require('rimraf');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const swaggerUi = require('swagger-ui-express');
@@ -21,11 +22,6 @@ if (!fs.existsSync('./media')) fs.mkdirSync('./media');
 // SQLite setup for QR code and whatsapp message storage
 const db = new sqlite3.Database('whatsapp_session.db');
 db.serialize(() => {
-    db.run(`CREATE TABLE IF NOT EXISTS whatsapp_qr_codes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        qr_code TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )`);
     db.run(`CREATE TABLE IF NOT EXISTS whatsapp_messages (
         id TEXT PRIMARY KEY,
         chat_id TEXT,
@@ -62,18 +58,55 @@ const client = new Client({
 
 // ----------------- Custom functions ----------------->>>
 
+const SESSION_DIR = path.join(__dirname, '.wwebjs_auth');
+const CACHE_DIR = path.join(__dirname, '.wwebjs_cache');
+const MEDIA_DIR = path.join(__dirname, 'media');
+const DB_FILE = path.join(__dirname, 'whatsapp_session.db');
 
-// Save QR code to DB
-function saveQrToDb(qr) {
-    db.run("INSERT INTO whatsapp_qr_codes (qr_code) VALUES (?)", [qr]);
+function cleanSessionFolder() {
+    // Remove .wwebjs_auth directory
+    if (fs.existsSync(SESSION_DIR)) {
+        try {
+            rimraf.sync(SESSION_DIR);
+            // console.log('[session] Cleaned up .wwebjs_auth directory.');
+        } catch (err) {
+            console.error('[session] Failed to clean session dir:', err.message);
+        }
+    }
+
+    // Remove .wwebjs_cache directory
+    if (fs.existsSync(CACHE_DIR)) {
+        try {
+            rimraf.sync(CACHE_DIR);
+            // console.log('[session] Cleaned up .wwebjs_cache directory.');
+        } catch (err) {
+            console.error('[session] Failed to clean cache dir:', err.message);
+        }
+    }
+
+    // Remove media directory
+    if (fs.existsSync(MEDIA_DIR)) {
+        try {
+            rimraf.sync(MEDIA_DIR);
+            // console.log('[session] Cleaned up media directory.');
+            fs.mkdirSync('./media');
+        } catch (err) {
+            console.error('[session] Failed to clean media dir:', err.message);
+        }
+    }
+
+    // Remove all data from whatsapp_messages table
+    if (fs.existsSync(DB_FILE)) {
+        db.run("DELETE FROM whatsapp_messages", function(err) {
+            if (err) {
+                console.error('[session] Failed to delete all records from whatsapp_messages:', err.message);
+            } else {
+                // console.log('[session] All records deleted from whatsapp_messages.');
+            }
+        });
+    }
 }
 
-// Get latest QR from DB
-function getLatestQrFromDb(cb) {
-    db.get("SELECT qr_code FROM whatsapp_qr_codes ORDER BY id DESC LIMIT 1", [], (err, row) => {
-        cb(row ? row.qr_code : null);
-    });
-}
 
 // Save message to DB
 function saveMessageToDb(msg, chatId, hasMedia=false, mediaPath=null) {
@@ -118,7 +151,6 @@ function looksLikeBotOrMeta(name, number) {
 
 client.on('qr', async (qr) => {
     currentQr = qr;
-    saveQrToDb(qr);
     console.log('[whatsapp-web.js] New QR code generated.');
 });
 
@@ -132,9 +164,28 @@ client.on('ready', () => {
     console.log('[whatsapp-web.js] Client is ready!');
 });
 
-client.on('disconnected', (reason) => {
+client.on('disconnected', async (reason) => {
     connected = false;
     console.log('[whatsapp-web.js] Disconnected:', reason);
+
+    // Clean and re-initialize if LOGOUT
+    if (reason === 'LOGOUT') {
+        try {
+            if (client.pupBrowser) {
+                await client.pupBrowser.close(); // <-- ensure browser is closed!
+            }
+        } catch (err) {
+            console.error('[whatsapp-web.js] Failed to close Puppeteer browser:', err.message);
+        }
+
+        try {
+            cleanSessionFolder(); // Deletes .wwebjs_auth, .wwebjs_cache, media, whatsapp_session.db
+            console.log('[whatsapp-web.js] Session cleaned due to LOGOUT. Re-initializing for new QR...');
+            setTimeout(() => client.initialize(), 2000);
+        } catch (err) {
+            console.error('[whatsapp-web.js] Failed to reset session:', err.message);
+        }
+    }
 });
 
 client.on('message', async (msg) => {
@@ -166,10 +217,10 @@ client.initialize();
 
 // Root URL
 app.get('/', (req, res) => {
-    res.json({
-        "status": "OK"
-    })
-    // res.redirect('/docs');
+    // res.json({
+    //     "status": "OK"
+    // })
+    res.redirect('/docs');
 });
 
 // Get status (whatsapp-api)
@@ -184,31 +235,20 @@ app.get('/status', (req, res) => {
 // Get qr-code (text response)
 app.get('/qr-code', async (req, res) => {
     if (!currentQr) {
-        getLatestQrFromDb(async (qr) => {
-            if (!qr) return res.status(404).json({ error: "No QR code available" });
-            const qrImage = await qrcode.toDataURL(qr);
-            res.json({ qr_code_image: qrImage });
-        });
-    } else {
-        const qrImage = await qrcode.toDataURL(currentQr);
-        res.json({ qr_code_image: qrImage });
+        return res.status(404).json({ error: "No QR code available. Either already authenticated or client not ready." });
     }
+    const qrCode = await qrcode.toDataURL(currentQr);
+    res.json({ qr_code: qrCode });
 });
 
 // Get qr-code (image response)
 app.get('/qr-code-image', async (req, res) => {
     if (!currentQr) {
-        getLatestQrFromDb(async (qr) => {
-            if (!qr) return res.status(404).send('No QR code');
-            const img = await qrcode.toBuffer(qr, { type: 'png' });
-            res.setHeader('Content-Type', 'image/png');
-            res.send(img);
-        });
-    } else {
-        const img = await qrcode.toBuffer(currentQr, { type: 'png' });
-        res.setHeader('Content-Type', 'image/png');
-        res.send(img);
+        return res.status(404).json({ error: "No QR code available. Either already authenticated or client not ready." });
     }
+    const img = await qrcode.toBuffer(currentQr, { type: 'png' });
+    res.setHeader('Content-Type', 'image/png');
+    res.send(img);
 });
 
 // List all contacts (filter MyContact and only @c.us)
@@ -333,6 +373,18 @@ app.get('/list-messages', async (req, res) => {
 app.get('/recent-messages', (req, res) => {
     db.all(
         `SELECT * FROM whatsapp_messages ORDER BY timestamp DESC LIMIT 50`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows);
+        }
+    );
+});
+
+// List recent status messages
+app.get('/recent-statuses', (req, res) => {
+    db.all(
+        `SELECT * FROM whatsapp_messages WHERE chat_id='status@broadcast' ORDER BY timestamp DESC LIMIT 50`,
         [],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
