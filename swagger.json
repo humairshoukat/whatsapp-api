@@ -86,6 +86,14 @@
         }
       }
     },
+    "/recent-statuses": {
+      "get": {
+        "summary": "List recent status messages",
+        "responses": {
+          "200": { "description": "Recent status messages", "content": { "application/json": { } } }
+        }
+      }
+    },
     "/unread-chats": {
       "get": {
         "summary": "List unread chats",
