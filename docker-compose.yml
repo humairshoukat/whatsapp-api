@@ -1,0 +1,10 @@
+services:
+  whatsapp-api:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./media:/app/media
+      - ./db:/app/db
+      - ./.wwebjs_auth:/app/.wwebjs_auth  # <-- Session is persisted!
+      - ./wwebjs_cache:/app/.wwebjs_cache 
