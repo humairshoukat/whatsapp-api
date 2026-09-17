@@ -87,18 +87,6 @@ docker run -p 8000:8000 \
 
 ---
 
-## 🗃️ File/Folder Structure
-
-whatsapp-api/
-├── index.js
-├── package.json
-├── swagger.json
-├── Dockerfile
-├── media/                 # auto-created, stores received media
-└── whatsapp_session.db    # auto-created, stores session/messages
-
----
-
 ## 📝 License (MIT)
 
 **Enjoy your Free WhatsApp REST API!**
